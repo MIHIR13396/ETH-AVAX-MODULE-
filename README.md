@@ -32,7 +32,7 @@ To interact with `DegenToken`:
 
 // SPDX-License-Identifier: MIT
 
-pragma solidity ^0.8.20;
+pragma solidity 0.8.20;
 
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
@@ -46,14 +46,15 @@ contract DegenToken is ERC20, Ownable, ERC20Burnable {
     }
 
     mapping(uint256 => Item) public items;
+    mapping(address => mapping(uint256 => uint256)) public playerItems;
     uint256 public nextItemId;
 
     event ItemAdded(uint256 itemId, string name, uint256 cost);
     event ItemUpdated(uint256 itemId, string name, uint256 cost);
     event ItemRemoved(uint256 itemId);
-    event ItemRedeemed(address indexed player, uint256 itemId, uint256 cost);
+    event ItemRedeemed(address indexed player, uint256 itemId, uint256 cost, uint256 quantity);
 
-    constructor() ERC20("Degen", "DGN") Ownable(msg.sender) {
+    constructor(address initialOwner) ERC20("Degen", "DGN") Ownable(initialOwner) {
         nextItemId = 1; // Start item IDs from 1 for better readability
     }
 
@@ -106,12 +107,13 @@ contract DegenToken is ERC20, Ownable, ERC20Burnable {
     }
 
     // Function to redeem tokens for in-game items by burning them
-    function redeemTokens(uint256 itemId) external {
+    function redeemTokens(uint256 itemId, uint256 quantity) external {
         require(items[itemId].available, "Item is not available");
-        uint256 cost = items[itemId].cost;
-        require(balanceOf(msg.sender) >= cost, "You do not have enough Degen Tokens");
-        burn(cost);
-        emit ItemRedeemed(msg.sender, itemId, cost);
+        uint256 totalCost = items[itemId].cost * quantity;
+        require(balanceOf(msg.sender) >= totalCost, "You do not have enough Degen Tokens");
+        burn(totalCost);
+        playerItems[msg.sender][itemId] += quantity;
+        emit ItemRedeemed(msg.sender, itemId, totalCost, quantity);
     }
 
     // Function to get details of an item
@@ -140,6 +142,11 @@ contract DegenToken is ERC20, Ownable, ERC20Burnable {
         }
 
         return availableItems;
+    }
+
+    // Function to get the quantity of a specific item a player owns
+    function getPlayerItemQuantity(address player, uint256 itemId) external view returns (uint256) {
+        return playerItems[player][itemId];
     }
 }
 ```
@@ -222,9 +229,36 @@ Get a list of all available items in the store.
 
 ```solidity
 function getAllItems() external view returns (Item[] memory) {
-    // Implementation details...
+    uint256 itemCount = 0;
+    for (uint256 i = 1; i < nextItemId; i++) {
+        if (items[i].available) {
+            itemCount++;
+        }
+    }
+
+    Item[] memory availableItems = new Item[](itemCount);
+    uint256 index = 0;
+    for (uint256 i = 1; i < nextItemId; i++) {
+        if (items[i].available) {
+            availableItems[index] = items[i];
+            index++;
+        }
+    }
+
+    return availableItems;
+
 }
 ```
+### Retrieving Player's Item Quantity
+Retrieves the quantity of a specific item (itemId) owned by a specified player (player).
+It accesses the playerItems mapping to retrieve the quantity of itemId owned by player.
+
+```solidity
+function getPlayerItemQuantity(address player, uint256 itemId) external view returns (uint256) {
+    return playerItems[player][itemId];
+}
+```
+
 
 ## Testing on Avalanche Fuji Testnet
 
